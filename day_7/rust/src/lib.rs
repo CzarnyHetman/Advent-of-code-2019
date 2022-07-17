@@ -176,129 +176,6 @@ impl IntComp {
     
 }
 
-pub fn process_stream<T: BufRead , U: Write>(program: &mut Vec<i32>, input: &mut T, output: &mut U){
-    process(program, || {
-        let mut buf = String::new();
-        input.read_line(&mut buf);
-        let s = buf.trim();
-        return String::from(s);
-    }, |value| {
-        let mut value = String::from(value);
-        value.push_str("\n\r");
-        let mut value = value.as_bytes();
-
-        output.write_all(&mut value).expect("write failed");
-    })
-
-}
-
-
-pub fn process<'a, F, G> (program: &mut Vec<i32>, mut input : F, mut output : G)
-where F: FnMut() -> String,
-    G: FnMut(String)
-{
-    let mut index = 0usize;
-
-    'process_loop: loop {
-        let inst = Instruction::new(program.get(index).expect("instruction missing"));
-        index += 1;
-        match inst {
-            Instruction::Add(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let val1 = params[0].get_value(program);
-                let val2 = params[1].get_value(program);
-                params[2].set_value(program, val1 + val2);
-
-                index += oc.param_count as usize;
-            },
-            Instruction::Multiply(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let val1 = params[0].get_value(program);
-                let val2 = params[1].get_value(program);
-                params[2].set_value(program, val1 * val2);
-
-                index += oc.param_count as usize;
-            },
-            Instruction::Input(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let s = input();
-                let value = s.parse::<i32>().expect("Input was wrong");
-
-                params[0].set_value(program, value);
-
-                index += oc.param_count as usize;
-            },
-            Instruction::Output(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let value = params[0].get_value(program).to_string();
-                
-                output(value);
-
-                index += oc.param_count as usize;
-            },
-            Instruction::JumpTrue(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let val1 = params[0].get_value(program);
-                let val2 = params[1].get_value(program);
-
-                if val1 != 0 {
-                    index = val2 as usize;
-                } else {
-                    index += oc.param_count as usize;
-                }
-            },
-            Instruction::JumpFalse(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let val1 = params[0].get_value(program);
-                let val2 = params[1].get_value(program);
-
-                if val1 == 0 {
-                    index = val2 as usize;
-                } else {
-                    index += oc.param_count as usize;
-                }
-            },
-            Instruction::LessThan(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let val1 = params[0].get_value(program);
-                let val2 = params[1].get_value(program);
-
-                if val1 < val2 {
-                    params[2].set_value(program, 1);
-                } else {
-                    params[2].set_value(program, 0);
-                }
-
-                index += oc.param_count as usize;
-            },
-            Instruction::Equals(oc) => {
-                let params = Param::get_params(program, &index, &oc);
-
-                let val1 = params[0].get_value(program);
-                let val2 = params[1].get_value(program);
-
-                if val1 == val2 {
-                    params[2].set_value(program, 1);
-                } else {
-                    params[2].set_value(program, 0);
-                }
-                
-                index += oc.param_count as usize;
-            },
-            Instruction::Halt => {
-                break 'process_loop;
-            }
-        }
-    }
-}
-
 pub fn get_file() -> Option<Vec<i32>> {
     let args : Vec<String> = env::args().collect();
     println!("{:?}", args);
@@ -324,129 +201,73 @@ pub fn get_file() -> Option<Vec<i32>> {
 mod tests {
     use super::*;
 
-    mod int_comp_tests {
-        use super::*;
-
-        #[test]
-        fn int_comp_adds() {
-            let program = vec![10001, 1,1,0, 99];
-            let mut int_comp = IntComp::new(&program);
-
-            int_comp.run();
-
-            assert_eq!(int_comp.get_program(), vec![10001, 1,1,2, 99])
-        }
-
-        #[test]
-        fn int_comp_multiplies() {
-            let program = vec![10002, 1,1,0, 99];
-            let mut int_comp = IntComp::new(&program);
-
-            int_comp.run();
-
-            assert_eq!(int_comp.get_program(), vec![10002, 1,1,1, 99])
-        }
-
-        #[test]
-        fn int_comp_resets() {
-            let program = vec![10001, 1,1,0, 99];
-            let mut int_comp = IntComp::new(&program);
-
-            let status = int_comp.run();
-
-            assert_eq!(status, Status::Halted);
-            assert_eq!(int_comp.get_program(), vec![10001, 1,1,2, 99]);
-
-            let status = int_comp.reset();
-
-            assert_eq!(status, Status::Ready);
-            assert_eq!(int_comp.get_program(), program);
-        }
-
-        #[test]
-        fn int_comp_outputs() {
-            let program = vec![104, 5, 99];
-            let mut int_comp = IntComp::new(&program);
-
-            let status = int_comp.run();
-
-            assert_eq!(int_comp.get_program(), vec![104, 5, 99]);
-            assert_eq!(status, Status::Outputed(5));
-
-            let status = int_comp.run();
-
-            assert_eq!(status, Status::Halted);
-        }
-
-        #[test]
-        fn int_comp_inputs() {
-            let program = vec![103, 5, 99];
-            let mut int_comp = IntComp::new(&program);
-
-            let status = int_comp.run();
-
-            assert_eq!(status, Status::RequestedInput);
-
-            let status = int_comp.run();
-
-            assert_eq!(status, Status::RequestedInput);
-
-            let status = int_comp.run_with_input(13);
-
-            assert_eq!(status, Status::Halted);
-            assert_eq!(int_comp.get_program(), vec![103, 13, 99]);
-        }
-    }
-
-
     #[test]
-    fn process_adds() {
-        let mut program = vec![10001, 1,1,0, 99];
-        let mut output_buf: Vec<u8> = Vec::new();
+    fn int_comp_adds() {
+        let program = vec![10001, 1,1,0, 99];
+        let mut int_comp = IntComp::new(&program);
 
-        process_stream(&mut program, &mut "".as_bytes(), &mut output_buf);
+        int_comp.run();
 
-        assert_eq!(program, vec![10001, 1,1,2, 99])
+        assert_eq!(int_comp.get_program(), vec![10001, 1,1,2, 99])
     }
 
     #[test]
-    fn process_multiplies() {
-        let mut program = vec![10002, 1,1,0, 99];
-        let mut output_buf: Vec<u8> = Vec::new();
+    fn int_comp_multiplies() {
+        let program = vec![10002, 1,1,0, 99];
+        let mut int_comp = IntComp::new(&program);
 
-        process_stream(&mut program, &mut "".as_bytes(), &mut output_buf);
+        int_comp.run();
 
-        assert_eq!(program, vec![10002, 1,1,1, 99])
+        assert_eq!(int_comp.get_program(), vec![10002, 1,1,1, 99])
     }
 
     #[test]
-    fn process_outputs() {
-        let mut program = vec![104, 5, 99];
-        let mut output_buf: Vec<u8> = Vec::new();
+    fn int_comp_resets() {
+        let program = vec![10001, 1,1,0, 99];
+        let mut int_comp = IntComp::new(&program);
 
-        process_stream(&mut program, &mut "".as_bytes(), &mut output_buf);
+        let status = int_comp.run();
 
-        assert_eq!(program, vec![104, 5, 99]);
-        assert_eq!(output_buf, vec![53, 10, 13]);
+        assert_eq!(status, Status::Halted);
+        assert_eq!(int_comp.get_program(), vec![10001, 1,1,2, 99]);
+
+        let status = int_comp.reset();
+
+        assert_eq!(status, Status::Ready);
+        assert_eq!(int_comp.get_program(), program);
     }
 
     #[test]
-    fn process_inputs() {
-        let mut program = vec![103, 5, 99];
-        let mut output_buf: Vec<u8> = Vec::new();
+    fn int_comp_outputs() {
+        let program = vec![104, 5, 99];
+        let mut int_comp = IntComp::new(&program);
 
-        process_stream(&mut program, &mut "13".as_bytes(), &mut output_buf);
+        let status = int_comp.run();
 
-        assert_eq!(program, vec![103, 13, 99]);
+        assert_eq!(int_comp.get_program(), vec![104, 5, 99]);
+        assert_eq!(status, Status::Outputed(5));
+
+        let status = int_comp.run();
+
+        assert_eq!(status, Status::Halted);
     }
 
     #[test]
-    fn process_inputs_positional() {
-        let mut program = vec![3, 3, 99, 0];
-        let mut output_buf: Vec<u8> = Vec::new();
+    fn int_comp_inputs() {
+        let program = vec![103, 5, 99];
+        let mut int_comp = IntComp::new(&program);
 
-        process_stream(&mut program, &mut "13".as_bytes(), &mut output_buf);
+        let status = int_comp.run();
 
-        assert_eq!(program, vec![3, 3, 99, 13]);
+        assert_eq!(status, Status::RequestedInput);
+
+        let status = int_comp.run();
+
+        assert_eq!(status, Status::RequestedInput);
+
+        let status = int_comp.run_with_input(13);
+
+        assert_eq!(status, Status::Halted);
+        assert_eq!(int_comp.get_program(), vec![103, 13, 99]);
     }
 }

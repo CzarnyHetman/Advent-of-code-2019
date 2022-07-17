@@ -1,38 +1,15 @@
+use int_comp::IntComp;
 use int_comp;
-
-struct Amplifier {
-    program: Vec<i32>,
-    phase: i32
-}
-
-impl Amplifier {
-    fn new(program: &Vec<i32>, phase: i32) -> Self {
-        Amplifier { program: program.clone(), phase }
-    }
-
-    fn run<F> (&mut self, mut input: F) -> i32
-    where F: FnMut() -> i32 
-    {
-        let phase = self.phase;
-        let mut phase_supplied = false;
-        let mut output = String::new();
-
-        int_comp::process(&mut self.program, || {
-            if !phase_supplied {
-                phase_supplied = true;
-                return phase.to_string();
-            }
-            input().to_string()
-        }, |s| output = s);
-
-        output.parse().unwrap()
-    }
-}
+use int_comp::instruction::Status;
 
 fn main() {
     let program: Vec<i32> = int_comp::get_file().unwrap();
 
     let result = get_thruster_value_v1(&program);
+
+    println!("Biggest output: {}, biggest phases: {:?}", result.0, result.1);
+
+    let result = get_thruster_value_v2(&program);
 
     println!("Biggest output: {}, biggest phases: {:?}", result.0, result.1);
 }
@@ -45,11 +22,9 @@ fn get_thruster_value_v2(program: &Vec<i32>) -> (i32, Vec<i32>) {
 
     let mut biggest_output = 0;
     let mut biggest_phases = permutable;
-
     for phases in aggregate {
         let mut output = 0;
-        output = test_phases(&phases);
-        
+        output = test_phases(program, &phases);
         if output > biggest_output {
             biggest_output = output;
             biggest_phases = phases.clone();
@@ -59,18 +34,47 @@ fn get_thruster_value_v2(program: &Vec<i32>) -> (i32, Vec<i32>) {
     (biggest_output, biggest_phases)
 }
 
-fn test_phases(phases: &Vec<i32>) -> i32 {
-    let mut amps: Vec<Amplifier> = Vec::new();
-    
+fn test_phases(program: &Vec<i32>, phases: &Vec<i32>) -> i32 {
+    let mut comp: Vec<IntComp> = vec![
+        IntComp::new(program),
+        IntComp::new(program),
+        IntComp::new(program),
+        IntComp::new(program),
+        IntComp::new(program)
+    ];
 
-    
-    2
+    for (i, phase) in phases.iter().enumerate() {
+        comp[i].run();
+        let status = comp[i].run_with_input(*phase);
+    }
+
+    let mut input = 0;
+
+    'main: loop {
+        for c in comp.iter_mut() {
+            let status = c.run_with_input(input);
+            match status {
+                Status::Outputed(output) => { input = output; c.run(); continue; },
+                _ => break 'main
+            }
+            //println!("Input {}", input);
+        }
+    }
+    input
 }
 
 fn get_thruster_value_v1(program: &Vec<i32>) -> (i32, Vec<i32>) {
     let mut aggregate: Vec<Vec<i32>> = Vec::new();
     let mut permutable = vec![0, 1, 2, 3, 4];
     let k = permutable.len();
+    
+    let mut comp: Vec<IntComp> = vec![
+        IntComp::new(program),
+        IntComp::new(program),
+        IntComp::new(program),
+        IntComp::new(program),
+        IntComp::new(program)
+    ];
     generate_permutation(&mut aggregate, k, &mut permutable);
 
     let mut biggest_output = 0;
@@ -78,8 +82,16 @@ fn get_thruster_value_v1(program: &Vec<i32>) -> (i32, Vec<i32>) {
 
     for phases in aggregate {
         let mut input = 0;
-        for phase in &phases {
-            input = run_process(&program, *phase, input).parse().unwrap();
+        for (i, phase) in phases.iter().enumerate() {
+            comp[i].reset();
+            comp[i].run();
+            comp[i].run_with_input(*phase);
+            let status = comp[i].run_with_input(input);
+            
+            match status {
+                Status::Outputed(output) => input = output,
+                _ => continue
+            }
         }
         if input > biggest_output {
             biggest_output = input;
@@ -108,36 +120,10 @@ fn generate_permutation(aggregate : &mut Vec<Vec<i32>>, k : usize, permutable: &
     }
 }
 
-fn run_process(program: &Vec<i32>, phase: i32, input: i32) -> String{
-    let mut program: Vec<i32> = program.clone();
-    let mut phase_suplied = false;
-    let mut output = String::new();
-
-    int_comp::process(&mut program, || {
-        if !phase_suplied {
-            phase_suplied = true;
-            return phase.to_string();
-        }
-        input.to_string()
-    }, |s| output = s);
-
-    output
-}
 
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn run_process_returns_0() {
-        let program = vec![103,1,103,2,10001, 1, 3, 15, 4, 7, 99];
-
-        let phase = 1;
-        let input = -1;
-        let result = run_process(&program, phase, input);
-
-        assert_eq!(result, "0");
-    }
 
     #[test]
     fn generate_permutation_outputs_permutations() {
