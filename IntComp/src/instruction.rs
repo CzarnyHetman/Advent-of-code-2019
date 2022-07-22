@@ -7,7 +7,7 @@ pub mod param;
 pub enum Status {
     Ready,
     RequestedInput,
-    Outputed(i32),
+    Outputed(i64),
     Halted
 }
 
@@ -20,11 +20,12 @@ pub enum Instruction {
     JumpFalse(Opcode),
     LessThan(Opcode),
     Equals(Opcode),
+    AdjustRelativeBase(Opcode),
     Halt
 }
 
 impl Instruction {
-    pub fn new(opcode: &i32) -> Self{
+    pub fn new(opcode: &i64) -> Self{
         let opcode = Instruction::parse_opcode(&opcode.to_string());
 
         match opcode.0 {
@@ -36,6 +37,7 @@ impl Instruction {
             6 => Instruction::JumpFalse(Opcode {param_count: 2, param_config: opcode.1}),
             7 => Instruction::LessThan(Opcode {param_count: 3, param_config: opcode.1}),
             8 => Instruction::Equals(Opcode {param_count: 3, param_config: opcode.1}),
+            9 => Instruction::AdjustRelativeBase(Opcode {param_count: 1, param_config: opcode.1}),
             99 => Instruction::Halt,
             number => panic!("{} is not supported opcode", number),
 
@@ -55,6 +57,7 @@ impl Instruction {
                 pc.push(match i {
                     0 => ParamMode::Position,
                     1 => ParamMode::Immediate,
+                    2 => ParamMode::Relative,
                     number => panic!("{} is invalid parameter mode", number)
                 });
             }

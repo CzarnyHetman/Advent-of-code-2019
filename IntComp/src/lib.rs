@@ -1,44 +1,47 @@
-use std::{io::{BufRead, Write}, env, path, fs};
+use std::{env, path, fs};
 
 use instruction::{Status, Instruction, param::{Param, Opcode}};
 
 pub mod instruction;
 
-struct Program {
-    program: Vec<i32>,
-    index: usize
+pub struct Program {
+    pub memory: Vec<i64>,
+    index: usize,
+    oc: Option<Opcode>,
+    relative_base: usize,
+    pub status: Status,
+}
+
+impl Program {
+    fn new(program: Vec<i64>) -> Self {
+        Program { memory: program, index: 0, oc: None, relative_base: 0, status: Status::Ready }
+    }
 }
 
 pub struct IntComp {
-    const_program: Vec<i32>,
-    program: Vec<i32>,
-    index: usize,
-    pub status: Status,
-    oc: Option<Opcode>,
+    const_program: Vec<i64>,
+    program: Program,
 }
 
 impl IntComp {
-    pub fn new(program: &Vec<i32>) -> Self {
-        IntComp { const_program: program.clone(), program: program.clone(), index: 0, status: Status::Ready, oc: None }
+    pub fn new(program: &Vec<i64>) -> Self {
+        IntComp { const_program: program.clone(), program: Program::new(program.clone()) }
     }
 
-    pub fn get_program(&self) -> Vec<i32> {
-        self.program.clone()
+    pub fn get_program(&self) -> Vec<i64> {
+        self.program.memory.clone()
     }
 
     pub fn reset(&mut self) -> Status {
         let original_program = self.const_program.clone();
-        self.program = original_program;
-        self.index = 0;
-        self.oc = None;
-        self.status = Status::Ready;
+        self.program =  Program::new(original_program);
 
         Status::Ready
     }
 
     pub fn run(&mut self) -> Status {
-        if self.status == Status::Halted || self.status == Status::RequestedInput {
-            return self.status;
+        if self.program.status == Status::Halted || self.program.status == Status::RequestedInput {
+            return self.program.status;
         }
 
         'run_loop: loop {
@@ -53,30 +56,30 @@ impl IntComp {
         }
     }
 
-    pub fn run_with_input(&mut self, input: i32) -> Status{
-        if self.status != Status::RequestedInput {
-            return self.status;
+    pub fn run_with_input(&mut self, input: i64) -> Status{
+        if self.program.status != Status::RequestedInput {
+            return self.program.status;
         }
 
-        let mut index = self.index;
+        let oc = &self.program.oc.clone().unwrap();
+        let index = self.program.index;
         let mut program = &mut self.program;
-        let oc = &self.oc.as_ref().unwrap();
 
         let params = Param::get_params(program, &index, &oc);
     
         params[0].set_value(&mut program, input);
 
-        index += oc.param_count as usize;
-        self.status = Status::Ready;
-        self.index = index;
+        let index = index + oc.param_count as usize;
+        self.program.status = Status::Ready;
+        self.program.index = index;
         self.run()
     }
 
     fn process_instruction(&mut self) -> Status {
-        let mut index = self.index;
+        let mut index = self.program.index;
         let mut program = &mut self.program;
         let mut opcode = None;
-        let inst = Instruction::new(program.get(index).expect("instruction missing"));
+        let inst = Instruction::new(program.memory.get(index).expect("instruction missing"));
         index += 1;
 
         let status = match inst {
@@ -168,20 +171,30 @@ impl IntComp {
                 index += oc.param_count as usize;
                 Status::Ready
             },
+            Instruction::AdjustRelativeBase(oc) => {
+                let params = Param::get_params(&program, &index, &oc);
+
+                let val1 = params[0].get_value(&program);
+
+                program.relative_base += val1 as usize;
+
+                index += oc.param_count as usize;
+                Status::Ready
+            }
             Instruction::Halt => {
                 Status::Halted
             }
         };
-        self.oc = opcode;
-        self.status = status;
-        self.index = index;
+        self.program.oc = opcode;
+        self.program.status = status;
+        self.program.index = index;
         
         status
     }
     
 }
 
-pub fn get_file() -> Option<Vec<i32>> {
+pub fn get_program_from_file() -> Option<Vec<i64>> {
     let args : Vec<String> = env::args().collect();
     println!("{:?}", args);
 
@@ -196,7 +209,7 @@ pub fn get_file() -> Option<Vec<i32>> {
 
     let file = fs::read_to_string(path).ok()?;
 
-    let code : Vec<i32> = file.split(",").map(|line| line.trim().parse::<i32>().unwrap_or_default()).collect();
+    let code : Vec<i64> = file.split(",").map(|line| line.trim().parse::<i64>().unwrap_or_default()).collect();
     
     Some(code)
 }
