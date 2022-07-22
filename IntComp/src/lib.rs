@@ -4,6 +4,7 @@ use instruction::{Status, Instruction, param::{Param, Opcode}};
 
 pub mod instruction;
 
+#[derive(Debug)]
 pub struct Program {
     pub memory: Vec<i64>,
     index: usize,
@@ -15,6 +16,28 @@ pub struct Program {
 impl Program {
     fn new(program: Vec<i64>) -> Self {
         Program { memory: program, index: 0, oc: None, relative_base: 0, status: Status::Ready }
+    }
+
+    fn extend_memory_to(&mut self, size: usize){
+        let length = self.memory.len();
+        let mut extension = vec![0i64;size - length + 1];
+        self.memory.append(&mut extension);
+    }
+
+    fn get(&mut self, index: usize) -> i64 {
+        if self.memory.len() <= index {
+            self.extend_memory_to(index);
+        }
+
+        *self.memory.get(index).unwrap()
+    }
+
+    fn set(&mut self, index: usize, value: i64){
+        if self.memory.len() <= index {
+            self.extend_memory_to(index);
+        }
+
+        self.memory[index] = value;
     }
 }
 
@@ -53,7 +76,7 @@ impl IntComp {
                 Status::Outputed(value) => break 'run_loop Status::Outputed(value),
                 Status::RequestedInput => break 'run_loop Status::RequestedInput
             }
-        }
+    }
     }
 
     pub fn run_with_input(&mut self, input: i64) -> Status{
@@ -77,28 +100,29 @@ impl IntComp {
 
     fn process_instruction(&mut self) -> Status {
         let mut index = self.program.index;
-        let mut program = &mut self.program;
         let mut opcode = None;
-        let inst = Instruction::new(program.memory.get(index).expect("instruction missing"));
+        let inst = Instruction::new(self.program.memory.get(index).expect("instruction missing"));
         index += 1;
+
+        println!("Inst {:?}: {:?}\n\tprogram: {:?}",self.program.memory.get(index-1), inst, self.program);
 
         let status = match inst {
             Instruction::Add(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let val1 = params[0].get_value(&program);
-                let val2 = params[1].get_value(&program);
-                params[2].set_value(&mut program, val1 + val2);
+                let val1 = params[0].get_value(&mut self.program);
+                let val2 = params[1].get_value(&mut self.program);
+                params[2].set_value(&mut self.program, val1 + val2);
     
                 index += oc.param_count as usize;
                 Status::Ready
             },
             Instruction::Multiply(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let val1 = params[0].get_value(&program);
-                let val2 = params[1].get_value(&program);
-                params[2].set_value(&mut program, val1 * val2);
+                let val1 = params[0].get_value(&mut self.program);
+                let val2 = params[1].get_value(&mut self.program);
+                params[2].set_value(&mut self.program, val1 * val2);
     
                 index += oc.param_count as usize;
                 Status::Ready
@@ -108,18 +132,18 @@ impl IntComp {
                 Status::RequestedInput
             },
             Instruction::Output(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let value = params[0].get_value(&program);
+                let value = params[0].get_value(&mut self.program);
                 
                 index += oc.param_count as usize;
                 Status::Outputed(value)
             },
             Instruction::JumpTrue(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let val1 = params[0].get_value(&program);
-                let val2 = params[1].get_value(&program);
+                let val1 = params[0].get_value(&mut self.program);
+                let val2 = params[1].get_value(&mut self.program);
     
                 if val1 != 0 {
                     index = val2 as usize;
@@ -129,10 +153,10 @@ impl IntComp {
                 Status::Ready
             },
             Instruction::JumpFalse(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let val1 = params[0].get_value(&program);
-                let val2 = params[1].get_value(&program);
+                let val1 = params[0].get_value(&mut self.program);
+                let val2 = params[1].get_value(&mut self.program);
     
                 if val1 == 0 {
                     index = val2 as usize;
@@ -142,41 +166,41 @@ impl IntComp {
                 Status::Ready
             },
             Instruction::LessThan(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let val1 = params[0].get_value(&program);
-                let val2 = params[1].get_value(&program);
+                let val1 = params[0].get_value(&mut self.program);
+                let val2 = params[1].get_value(&mut self.program);
     
                 if val1 < val2 {
-                    params[2].set_value(&mut program, 1);
+                    params[2].set_value(&mut self.program, 1);
                 } else {
-                    params[2].set_value(&mut program, 0);
+                    params[2].set_value(&mut self.program, 0);
                 }
     
                 index += oc.param_count as usize;
                 Status::Ready
             },
             Instruction::Equals(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
     
-                let val1 = params[0].get_value(&program);
-                let val2 = params[1].get_value(&program);
+                let val1 = params[0].get_value(&mut self.program);
+                let val2 = params[1].get_value(&mut self.program);
     
                 if val1 == val2 {
-                    params[2].set_value(&mut program, 1);
+                    params[2].set_value(&mut self.program, 1);
                 } else {
-                    params[2].set_value(&mut program, 0);
+                    params[2].set_value(&mut self.program, 0);
                 }
                 
                 index += oc.param_count as usize;
                 Status::Ready
             },
             Instruction::AdjustRelativeBase(oc) => {
-                let params = Param::get_params(&program, &index, &oc);
+                let params = Param::get_params(&self.program, &index, &oc);
 
-                let val1 = params[0].get_value(&program);
+                let val1 = params[0].get_value(&mut self.program);
 
-                program.relative_base += val1 as usize;
+                self.program.relative_base += val1 as usize;
 
                 index += oc.param_count as usize;
                 Status::Ready
@@ -218,6 +242,14 @@ pub fn get_program_from_file() -> Option<Vec<i64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extend_memory_to_5_extends_to_len_6() {
+        let mut program = Program::new(vec![1]);
+        program.extend_memory_to(5);
+
+        assert_eq!(program.memory.len(), 6);
+    }
 
     #[test]
     fn int_comp_adds() {

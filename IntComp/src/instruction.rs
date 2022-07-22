@@ -11,6 +11,7 @@ pub enum Status {
     Halted
 }
 
+#[derive(Debug)]
 pub enum Instruction {
     Add(Opcode),
     Multiply(Opcode),

@@ -1,6 +1,7 @@
 use crate::Program;
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct Opcode {
     pub param_count: u8,
     pub param_config: Vec<ParamMode>
@@ -29,21 +30,24 @@ pub struct Param {
 }
 
 impl Param {
-    pub fn get_value(&self, program: &Program) -> i64 {
-        let value = *match self.config {
-            ParamMode::Position => program.memory.get(self.value as usize).expect("Index out of bounds"),
-            ParamMode::Relative => program.memory.get(program.relative_base + self.value as usize).expect("Index out of bounds"),
-            ParamMode::Immediate => &self.value,
+    pub fn get_value(&self, program: &mut Program) -> i64 {
+        let position = self.value as usize;
+        let relative = (program.relative_base as i64 + self.value) as usize;
+        let value = match self.config {
+            ParamMode::Position => program.get(position),
+            ParamMode::Relative => program.get(relative),
+            ParamMode::Immediate => self.value,
         };
 
         value
     }
     pub fn set_value(&self, program: &mut Program, value: i64) {
-        let relative_base = program.relative_base;
+        let position = self.value as usize;
+        let relative = (program.relative_base as i64 + self.value) as usize;
         match self.config {
-            ParamMode::Position => program.memory[self.value as usize] = value,
-            ParamMode::Relative => program.memory[relative_base + self.value as usize] = value,
-            ParamMode::Immediate => program.memory[self.index] = value
+            ParamMode::Position => program.set(position, value),
+            ParamMode::Relative => program.set(relative, value),
+            ParamMode::Immediate => program.set(self.index, value)
         }
     }
 
