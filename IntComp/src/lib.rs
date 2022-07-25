@@ -91,8 +91,9 @@ impl IntComp {
         let params = Param::get_params(program, &index, &oc);
     
         params[0].set_value(&mut program, input);
-
-        let index = index + oc.param_count as usize;
+        println!("Index before: {}", index);
+        let index = index + (oc.param_count as usize);
+        println!("Index before: {}", index);
         self.program.status = Status::Ready;
         self.program.index = index;
         self.run()
@@ -103,8 +104,6 @@ impl IntComp {
         let mut opcode = None;
         let inst = Instruction::new(self.program.memory.get(index).expect("instruction missing"));
         index += 1;
-
-        println!("Inst {:?}: {:?}\n\tprogram: {:?}",self.program.memory.get(index-1), inst, self.program);
 
         let status = match inst {
             Instruction::Add(oc) => {
